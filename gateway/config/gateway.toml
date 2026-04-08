@@ -1,0 +1,8 @@
+[server]
+host = "127.0.0.1"
+port = 8080
+
+[config_files]
+services = "services.toml"
+routes = "routes.toml"
+openapi = "openapi.yaml"

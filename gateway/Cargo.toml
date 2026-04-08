@@ -1,0 +1,28 @@
+[package]
+name = "api-gateway"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "api_gateway"
+path = "src/lib.rs"
+
+[[bin]]
+name = "api-gateway"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+config.workspace = true
+http.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+toml.workspace = true
+tracing.workspace = true
+tracing-subscriber.workspace = true
+utoipa-swagger-ui.workspace = true

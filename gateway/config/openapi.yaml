@@ -1,0 +1,189 @@
+openapi: "3.0.0"
+info:
+  title: API Gateway
+  version: 0.1.0
+  description: High-Performance API Gateway
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: orders
+    description: Order management
+  - name: payments
+    description: Payment processing
+
+paths:
+  /api/v1/orders:
+    get:
+      tags: [orders]
+      summary: List all orders
+      operationId: listOrders
+      responses:
+        "200":
+          description: List of orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+    post:
+      tags: [orders]
+      summary: Create a new order
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /api/v1/orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [orders]
+      summary: Get order by ID
+      operationId: getOrder
+      responses:
+        "200":
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "404":
+          description: Order not found
+    put:
+      tags: [orders]
+      summary: Update an order
+      operationId: updateOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "200":
+          description: Order updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+    delete:
+      tags: [orders]
+      summary: Delete an order
+      operationId: deleteOrder
+      responses:
+        "204":
+          description: Order deleted
+
+  /api/v1/orders/{id}/pay:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    post:
+      tags: [payments]
+      summary: Create payment for an order
+      operationId: createPayment
+      responses:
+        "201":
+          description: Payment initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /api/v1/payments/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [payments]
+      summary: Get payment by ID
+      operationId: getPayment
+      responses:
+        "200":
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+        "404":
+          description: Payment not found
+
+  /api/v1/payments/{id}/refund:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    patch:
+      tags: [payments]
+      summary: Refund a payment
+      operationId: refundPayment
+      responses:
+        "200":
+          description: Payment refunded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+components:
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        item:
+          type: string
+        quantity:
+          type: integer
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled]
+
+    CreateOrderRequest:
+      type: object
+      required: [item, quantity]
+      properties:
+        item:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: double
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [processing, completed, refunded]
