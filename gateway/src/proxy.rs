@@ -8,6 +8,8 @@ use hyper_util::rt::TokioExecutor;
 
 use crate::error::{ErrorResponse, GatewayError};
 
+const TEXT_YAML: &str = "text/yaml";
+
 pub type ResponseBody = BoxBody<Bytes, hyper::Error>;
 
 pub struct ProxyClient {
@@ -79,7 +81,7 @@ pub(crate) fn json_error(
 
     Ok(Response::builder()
         .status(status)
-        .header(http::header::CONTENT_TYPE, "application/json")
+        .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
         .body(owned_body(&json))?)
 }
 
@@ -93,7 +95,7 @@ pub(crate) fn redirect(location: &str) -> Result<Response<ResponseBody>, Gateway
 pub(crate) fn yaml_response(body: &str) -> Result<Response<ResponseBody>, GatewayError> {
     Ok(Response::builder()
         .status(http::StatusCode::OK)
-        .header(http::header::CONTENT_TYPE, "text/yaml")
+        .header(http::header::CONTENT_TYPE, TEXT_YAML)
         .body(owned_body(body))?)
 }
 
@@ -109,7 +111,21 @@ pub(crate) fn static_body(data: &'static str) -> ResponseBody {
         .boxed()
 }
 
-fn owned_body(data: &str) -> ResponseBody {
+pub(crate) fn json_response(body: &str) -> Result<Response<ResponseBody>, GatewayError> {
+    Ok(Response::builder()
+        .status(http::StatusCode::OK)
+        .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+        .body(owned_body(body))?)
+}
+
+pub(crate) fn service_unavailable(service: &str) -> Result<Response<ResponseBody>, GatewayError> {
+    json_error(
+        http::StatusCode::SERVICE_UNAVAILABLE,
+        &format!("service '{}' is currently unavailable", service),
+    )
+}
+
+pub(crate) fn owned_body(data: &str) -> ResponseBody {
     Full::new(Bytes::copy_from_slice(data.as_bytes()))
         .map_err(|never| match never {})
         .boxed()

@@ -14,6 +14,13 @@ where
 pub struct GatewayConfig {
     pub server: ServerConfig,
     pub config_files: ConfigFiles,
+    pub health_check: HealthCheckConfig,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct HealthCheckConfig {
+    pub interval_secs: u64,
+    pub path: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -27,6 +34,7 @@ pub struct ConfigFiles {
 pub struct ServerConfig {
     pub host: String,
     pub port: u16,
+    pub timeout_secs: u64,
 }
 
 #[derive(Debug, Deserialize)]

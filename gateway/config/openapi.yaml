@@ -9,12 +9,28 @@ servers:
     description: Local development
 
 tags:
+  - name: gateway
+    description: Gateway internal endpoints
   - name: orders
     description: Order management
   - name: payments
     description: Payment processing
 
 paths:
+  /health:
+    get:
+      tags: [gateway]
+      summary: Health check
+      operationId: healthCheck
+      description: Returns the health status of the gateway and backend services
+      responses:
+        "200":
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthSummary"
+
   /api/v1/orders:
     get:
       tags: [orders]
@@ -187,3 +203,14 @@ components:
         status:
           type: string
           enum: [processing, completed, refunded]
+          
+    HealthSummary:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        services:
+          type: object
+          additionalProperties:
+            type: string

@@ -1,6 +1,6 @@
 use axum::extract::Path;
 use axum::http::StatusCode;
-use axum::routing::{patch, post};
+use axum::routing::{get, patch, post};
 use axum::{Json, Router};
 use serde::Serialize;
 
@@ -37,9 +37,14 @@ async fn refund_payment(Path(id): Path<String>) -> Json<Payment> {
     Json(mock_payment(&id, "refunded"))
 }
 
+async fn health() -> StatusCode {
+    StatusCode::OK
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
+        .route("/health", get(health))
         .route("/v1/payments/{id}", post(create_payment).get(get_payment))
         .route("/v1/payments/{id}/refund", patch(refund_payment));
 

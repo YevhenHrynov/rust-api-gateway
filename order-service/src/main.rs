@@ -46,9 +46,14 @@ async fn delete_order(Path(_): Path<String>) -> StatusCode {
     StatusCode::NO_CONTENT
 }
 
+async fn health() -> StatusCode {
+    StatusCode::OK
+}
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
+        .route("/health", get(health))
         .route("/v1/orders", get(list_orders).post(create_order))
         .route(
             "/v1/orders/{id}",

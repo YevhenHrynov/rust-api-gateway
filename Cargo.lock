@@ -83,6 +83,7 @@ dependencies = [
  "http-body-util",
  "hyper",
  "hyper-util",
+ "mime",
  "serde",
  "serde_json",
  "thiserror",

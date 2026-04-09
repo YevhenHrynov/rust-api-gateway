@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::convert::Infallible;
 use std::net::SocketAddr;
 use std::sync::Arc;
+use std::time::Duration;
 
 use hyper::Request;
 use hyper::body::Incoming;
@@ -9,11 +10,12 @@ use hyper::service::service_fn;
 use hyper_util::rt::{TokioExecutor, TokioIo};
 use hyper_util::server::conn::auto::Builder;
 use tokio::net::TcpListener;
-use tracing::{error, info};
+use tracing::{error, info, warn};
 use utoipa_swagger_ui::Config;
 
-use crate::config::AppConfig;
+use crate::config::{AppConfig, HealthCheckConfig};
 use crate::error::GatewayError;
+use crate::health::{self, HealthState};
 use crate::proxy::{self, ProxyClient, ResponseBody};
 use crate::router::Router;
 
@@ -28,6 +30,9 @@ pub struct Gateway {
     addr: SocketAddr,
     openapi_spec: String,
     swagger_config: Arc<Config<'static>>,
+    health_state: HealthState,
+    health_check_config: HealthCheckConfig,
+    timeout: Duration,
 }
 
 impl Gateway {
@@ -60,6 +65,9 @@ impl Gateway {
 
         let swagger_config = Arc::new(Config::from(DOCS_SPEC_PATH));
 
+        let service_names: Vec<String> = services.keys().cloned().collect();
+        let health_state = health::new_health_state(&service_names);
+
         Ok(Gateway {
             router,
             proxy,
@@ -67,12 +75,24 @@ impl Gateway {
             addr,
             openapi_spec: config.openapi_spec,
             swagger_config,
+            health_state,
+            health_check_config: config.gateway.health_check,
+            timeout: Duration::from_secs(config.gateway.server.timeout_secs),
         })
     }
 
     pub async fn run(self) -> Result<(), GatewayError> {
         let listener = TcpListener::bind(self.addr).await?;
         info!("listening on {}", self.addr);
+
+        let checker = health::HealthChecker::new(
+            self.services.clone(),
+            self.health_state.clone(),
+            self.health_check_config.path.clone(),
+            Duration::from_secs(self.health_check_config.interval_secs),
+            self.timeout,
+        );
+        checker.spawn();
 
         let shared = Arc::new(self);
 
@@ -143,6 +163,13 @@ impl Gateway {
 
         info!("{} {} {}", remote_addr, method, path);
 
+        if path == "/health" && method == http::Method::GET {
+            let summary = health::build_health_summary(&self.health_state).await;
+            let json =
+                serde_json::to_string(&summary).map_err(|e| GatewayError::Proxy(e.to_string()))?;
+            return proxy::json_response(&json);
+        }
+
         if path == DOCS_BASE_PATH {
             return proxy::redirect(DOCS_REDIRECT_PATH);
         }
@@ -164,6 +191,19 @@ impl Gateway {
             Some(url) => url,
             None => return proxy::bad_gateway("service not configured"),
         };
+
+        {
+            let health = self.health_state.read().await;
+            if let Some(status) = health.get(&route_match.service_name) {
+                if !status.is_healthy() {
+                    warn!(
+                        service = %route_match.service_name,
+                        "request rejected: service unhealthy"
+                    );
+                    return proxy::service_unavailable(&route_match.service_name);
+                }
+            }
+        }
 
         match self
             .proxy
