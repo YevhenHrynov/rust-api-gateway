@@ -15,6 +15,8 @@ tags:
     description: Order management
   - name: payments
     description: Payment processing
+  - name: admin
+    description: Service administration
 
 paths:
   /health:
@@ -151,6 +153,22 @@ paths:
               schema:
                 $ref: "#/components/schemas/Payment"
 
+  /api/admin/orders/availability:
+    post:
+      tags: [admin]
+      summary: Toggle order endpoints availability
+      operationId: setOrdersAvailability
+      description: Controls whether GET /orders and POST /orders return responses or 503. Useful for testing circuit breaker and retry behavior.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityRequest"
+      responses:
+        "200":
+          description: Availability updated
+
 components:
   parameters:
     ResourceId:
@@ -204,6 +222,14 @@ components:
           type: string
           enum: [processing, completed, refunded]
           
+    AvailabilityRequest:
+      type: object
+      required: [available]
+      properties:
+        available:
+          type: boolean
+          description: Whether the order endpoints should be available
+
     HealthSummary:
       type: object
       properties:

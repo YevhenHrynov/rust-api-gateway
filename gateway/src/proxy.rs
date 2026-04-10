@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use http::{Request, Response};
 use http_body_util::combinators::BoxBody;
 use http_body_util::{BodyExt, Full};
@@ -5,7 +7,9 @@ use hyper::body::{Bytes, Incoming};
 use hyper_util::client::legacy::Client;
 use hyper_util::client::legacy::connect::HttpConnector;
 use hyper_util::rt::TokioExecutor;
+use tracing::warn;
 
+use crate::config::RetryConfig;
 use crate::error::{ErrorResponse, GatewayError};
 
 const TEXT_YAML: &str = "text/yaml";
@@ -40,15 +44,20 @@ impl ProxyClient {
             .map(|q| format!("?{}", q))
             .unwrap_or_default();
 
-        let uri = format!("{}{}{}", upstream_base, upstream_path, query).parse()?;
+        let uri: http::Uri = format!("{}{}{}", upstream_base, upstream_path, query).parse()?;
 
-        let (mut parts, body) = req.into_parts();
-        parts.uri = uri;
-        parts.headers.remove(http::header::HOST);
+        let (parts, body) = req.into_parts();
+        let body_bytes = body
+            .collect()
+            .await
+            .map_err(|e| GatewayError::Proxy(e.to_string()))?
+            .to_bytes();
 
-        let proxied_req = Request::from_parts(parts, body.boxed());
+        let mut headers = parts.headers.clone();
+        headers.remove(http::header::HOST);
 
-        let resp = self
+        let proxied_req = self.build_request(parts.method, uri, headers, body_bytes)?;
+        let resp: Response<Incoming> = self
             .client
             .request(proxied_req)
             .await
@@ -57,6 +66,115 @@ impl ProxyClient {
         let (parts, body) = resp.into_parts();
         Ok(Response::from_parts(parts, body.boxed()))
     }
+
+    pub async fn forward_with_retry(
+        &self,
+        req: Request<Incoming>,
+        upstream_base: &str,
+        upstream_path: &str,
+        config: &RetryConfig,
+    ) -> Result<Response<ResponseBody>, GatewayError> {
+        let query = req
+            .uri()
+            .query()
+            .map(|q| format!("?{}", q))
+            .unwrap_or_default();
+
+        let uri: http::Uri = format!("{}{}{}", upstream_base, upstream_path, query).parse()?;
+
+        let (parts, body) = req.into_parts();
+        let body_bytes = body
+            .collect()
+            .await
+            .map_err(|e| GatewayError::Proxy(e.to_string()))?
+            .to_bytes();
+
+        let mut headers = parts.headers.clone();
+        headers.remove(http::header::HOST);
+
+        let mut last_err = None;
+
+        for attempt in 0..=config.max_retries {
+            if attempt > 0 {
+                let delay = Duration::from_millis(config.base_delay_ms * 2u64.pow(attempt - 1));
+                warn!(
+                    attempt,
+                    delay_ms = delay.as_millis() as u64,
+                    "retrying request"
+                );
+                tokio::time::sleep(delay).await;
+            }
+
+            let req = self.build_request(
+                parts.method.clone(),
+                uri.clone(),
+                headers.clone(),
+                body_bytes.clone(),
+            )?;
+
+            match self.client.request(req).await {
+                Ok(resp) if resp.status().is_server_error() && attempt < config.max_retries => {
+                    warn!(
+                        attempt,
+                        status = resp.status().as_u16(),
+                        "upstream returned server error, will retry"
+                    );
+                    last_err = Some(GatewayError::Proxy(format!(
+                        "upstream status {}",
+                        resp.status()
+                    )));
+                }
+                Ok(resp) => {
+                    let (parts, body) = resp.into_parts();
+                    return Ok(Response::from_parts(parts, body.boxed()));
+                }
+                Err(e) if attempt < config.max_retries => {
+                    warn!(attempt, error = %e, "upstream connection failed, will retry");
+                    last_err = Some(GatewayError::Proxy(e.to_string()));
+                }
+                Err(e) => {
+                    return Err(GatewayError::Proxy(e.to_string()));
+                }
+            }
+        }
+
+        Err(last_err.unwrap_or_else(|| GatewayError::Proxy("all retries exhausted".to_owned())))
+    }
+
+    fn build_request(
+        &self,
+        method: http::Method,
+        uri: http::Uri,
+        headers: http::HeaderMap,
+        body: Bytes,
+    ) -> Result<Request<ResponseBody>, GatewayError> {
+        let mut builder = Request::builder().method(method).uri(uri);
+        *builder
+            .headers_mut()
+            .ok_or_else(|| GatewayError::Proxy("failed to build request".to_owned()))? = headers;
+        Ok(builder.body(Full::new(body).map_err(|never| match never {}).boxed())?)
+    }
+}
+
+pub(crate) fn json_error_fallback(
+    status: http::StatusCode,
+    message: &str,
+) -> Response<ResponseBody> {
+    json_error(status, message).unwrap_or_else(|_| {
+        let body = serde_json::to_string(&ErrorResponse {
+            error: status.canonical_reason().unwrap_or("Unknown"),
+            message,
+            status: status.as_u16(),
+        })
+        .unwrap_or_default();
+        let mut resp = Response::new(owned_body(&body));
+        *resp.status_mut() = status;
+        resp.headers_mut().insert(
+            http::header::CONTENT_TYPE,
+            http::HeaderValue::from_static(mime::APPLICATION_JSON.as_ref()),
+        );
+        resp
+    })
 }
 
 pub(crate) fn not_found() -> Result<Response<ResponseBody>, GatewayError> {
@@ -105,12 +223,6 @@ pub(crate) fn bytes_body(data: Vec<u8>) -> ResponseBody {
         .boxed()
 }
 
-pub(crate) fn static_body(data: &'static str) -> ResponseBody {
-    Full::new(Bytes::from_static(data.as_bytes()))
-        .map_err(|never| match never {})
-        .boxed()
-}
-
 pub(crate) fn json_response(body: &str) -> Result<Response<ResponseBody>, GatewayError> {
     Ok(Response::builder()
         .status(http::StatusCode::OK)
@@ -122,6 +234,13 @@ pub(crate) fn service_unavailable(service: &str) -> Result<Response<ResponseBody
     json_error(
         http::StatusCode::SERVICE_UNAVAILABLE,
         &format!("service '{}' is currently unavailable", service),
+    )
+}
+
+pub(crate) fn circuit_open(service: &str) -> Result<Response<ResponseBody>, GatewayError> {
+    json_error(
+        http::StatusCode::SERVICE_UNAVAILABLE,
+        &format!("circuit breaker open for service '{}'", service),
     )
 }
 

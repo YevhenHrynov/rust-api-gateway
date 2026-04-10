@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use http::Method;
 
-use crate::config::RouteDefinition;
+use crate::config::{CircuitBreakerConfig, RetryConfig, RouteDefinition};
 
 #[derive(Debug)]
 pub struct Router {
@@ -12,6 +12,8 @@ pub struct Router {
 pub struct RouteMatch {
     pub service_name: String,
     pub upstream_path: String,
+    pub retry: Option<RetryConfig>,
+    pub circuit_breaker: Option<CircuitBreakerConfig>,
 }
 
 #[derive(Debug)]
@@ -20,6 +22,8 @@ struct CompiledRoute {
     method: Method,
     service_name: String,
     upstream_pattern: String,
+    retry: Option<RetryConfig>,
+    circuit_breaker: Option<CircuitBreakerConfig>,
 }
 
 #[derive(Debug)]
@@ -51,6 +55,8 @@ impl Router {
                     method: def.method,
                     service_name: def.service,
                     upstream_pattern: def.upstream_path,
+                    retry: def.retry,
+                    circuit_breaker: def.circuit_breaker,
                 }
             })
             .collect();
@@ -94,6 +100,8 @@ impl Router {
             Some(RouteMatch {
                 service_name: route.service_name.clone(),
                 upstream_path,
+                retry: route.retry.clone(),
+                circuit_breaker: route.circuit_breaker.clone(),
             })
         })
     }
@@ -111,30 +119,40 @@ mod tests {
                 method: Method::GET,
                 service: "order-service".to_owned(),
                 upstream_path: "/v1/orders".to_owned(),
+                retry: None,
+                circuit_breaker: None,
             },
             RouteDefinition {
                 path: "/api/v1/orders".to_owned(),
                 method: Method::POST,
                 service: "order-service".to_owned(),
                 upstream_path: "/v1/orders".to_owned(),
+                retry: None,
+                circuit_breaker: None,
             },
             RouteDefinition {
                 path: "/api/v1/orders/:id".to_owned(),
                 method: Method::GET,
                 service: "order-service".to_owned(),
                 upstream_path: "/v1/orders/:id".to_owned(),
+                retry: None,
+                circuit_breaker: None,
             },
             RouteDefinition {
                 path: "/api/v1/orders/:id".to_owned(),
                 method: Method::DELETE,
                 service: "order-service".to_owned(),
                 upstream_path: "/v1/orders/:id".to_owned(),
+                retry: None,
+                circuit_breaker: None,
             },
             RouteDefinition {
                 path: "/api/v1/orders/:id".to_owned(),
                 method: Method::PUT,
                 service: "order-service".to_owned(),
                 upstream_path: "/v1/orders/:id".to_owned(),
+                retry: None,
+                circuit_breaker: None,
             },
         ]
     }

@@ -48,6 +48,19 @@ pub struct ServiceDefinition {
     pub url: String,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct CircuitBreakerConfig {
+    pub failure_threshold: u32,
+    pub recovery_timeout_secs: u64,
+    pub half_open_max_requests: u32,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+pub struct RetryConfig {
+    pub max_retries: u32,
+    pub base_delay_ms: u64,
+}
+
 #[derive(Debug, Deserialize)]
 pub struct RoutesConfig {
     pub routes: Vec<RouteDefinition>,
@@ -60,4 +73,6 @@ pub struct RouteDefinition {
     pub method: Method,
     pub service: String,
     pub upstream_path: String,
+    pub retry: Option<RetryConfig>,
+    pub circuit_breaker: Option<CircuitBreakerConfig>,
 }

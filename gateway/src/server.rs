@@ -13,6 +13,7 @@ use tokio::net::TcpListener;
 use tracing::{error, info, warn};
 use utoipa_swagger_ui::Config;
 
+use crate::circuit_breaker::{self, CircuitBreakerRegistry};
 use crate::config::{AppConfig, HealthCheckConfig};
 use crate::error::GatewayError;
 use crate::health::{self, HealthState};
@@ -33,6 +34,7 @@ pub struct Gateway {
     health_state: HealthState,
     health_check_config: HealthCheckConfig,
     timeout: Duration,
+    circuit_breakers: CircuitBreakerRegistry,
 }
 
 impl Gateway {
@@ -67,6 +69,7 @@ impl Gateway {
 
         let service_names: Vec<String> = services.keys().cloned().collect();
         let health_state = health::new_health_state(&service_names);
+        let circuit_breakers = circuit_breaker::new_registry();
 
         Ok(Gateway {
             router,
@@ -78,6 +81,7 @@ impl Gateway {
             health_state,
             health_check_config: config.gateway.health_check,
             timeout: Duration::from_secs(config.gateway.server.timeout_secs),
+            circuit_breakers,
         })
     }
 
@@ -139,16 +143,10 @@ impl Gateway {
             Ok(resp) => Ok(resp),
             Err(e) => {
                 error!("internal error: {e}");
-                match proxy::json_error(
+                Ok(proxy::json_error_fallback(
                     http::StatusCode::INTERNAL_SERVER_ERROR,
                     "internal server error",
-                ) {
-                    Ok(resp) => Ok(resp),
-                    Err(_) => Ok(http::Response::builder()
-                        .status(http::StatusCode::INTERNAL_SERVER_ERROR)
-                        .body(proxy::static_body("internal server error"))
-                        .expect("static response must be valid")),
-                }
+                ))
             }
         }
     }
@@ -205,12 +203,52 @@ impl Gateway {
             }
         }
 
-        match self
-            .proxy
-            .forward(req, upstream_base, &route_match.upstream_path)
-            .await
-        {
+        if let Some(cb_config) = &route_match.circuit_breaker {
+            let mut breakers = self.circuit_breakers.lock().await;
+            let cb = breakers
+                .entry(route_match.service_name.clone())
+                .or_insert_with(|| circuit_breaker::CircuitBreaker::new(cb_config.clone()));
+
+            if !cb.allow_request() {
+                warn!(
+                    service = %route_match.service_name,
+                    "request rejected: circuit breaker open"
+                );
+                return proxy::circuit_open(&route_match.service_name);
+            }
+        }
+
+        let result = match &route_match.retry {
+            Some(retry_config) => {
+                self.proxy
+                    .forward_with_retry(
+                        req,
+                        upstream_base,
+                        &route_match.upstream_path,
+                        retry_config,
+                    )
+                    .await
+            }
+            None => {
+                self.proxy
+                    .forward(req, upstream_base, &route_match.upstream_path)
+                    .await
+            }
+        };
+
+        match result {
             Ok(resp) => {
+                if route_match.circuit_breaker.is_some() {
+                    let mut breakers = self.circuit_breakers.lock().await;
+                    if let Some(cb) = breakers.get_mut(&route_match.service_name) {
+                        if resp.status().is_server_error() {
+                            cb.record_failure();
+                        } else {
+                            cb.record_success();
+                        }
+                    }
+                }
+
                 info!(
                     "{} {} -> {} {} ({})",
                     remote_addr,
@@ -222,6 +260,13 @@ impl Gateway {
                 Ok(resp)
             }
             Err(e) => {
+                if route_match.circuit_breaker.is_some() {
+                    let mut breakers = self.circuit_breakers.lock().await;
+                    if let Some(cb) = breakers.get_mut(&route_match.service_name) {
+                        cb.record_failure();
+                    }
+                }
+
                 error!(
                     "{} {} -> {} error: {}",
                     remote_addr, method, route_match.service_name, e
