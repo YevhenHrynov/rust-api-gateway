@@ -37,6 +37,17 @@ pub struct ServerConfig {
     pub timeout_secs: u64,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+pub struct RateLimitConfig {
+    pub points: u32,
+    #[serde(default = "default_duration")]
+    pub duration: u32,
+}
+
+fn default_duration() -> u32 {
+    1
+}
+
 #[derive(Debug, Deserialize)]
 pub struct ServicesConfig {
     pub services: Vec<ServiceDefinition>,
@@ -75,4 +86,5 @@ pub struct RouteDefinition {
     pub upstream_path: String,
     pub retry: Option<RetryConfig>,
     pub circuit_breaker: Option<CircuitBreakerConfig>,
+    pub rate_limit: Option<RateLimitConfig>,
 }

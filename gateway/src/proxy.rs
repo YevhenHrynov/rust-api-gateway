@@ -13,6 +13,7 @@ use crate::config::RetryConfig;
 use crate::error::{ErrorResponse, GatewayError};
 
 const TEXT_YAML: &str = "text/yaml";
+const APPLICATION_JSON: &str = "application/json";
 
 pub type ResponseBody = BoxBody<Bytes, hyper::Error>;
 
@@ -171,7 +172,7 @@ pub(crate) fn json_error_fallback(
         *resp.status_mut() = status;
         resp.headers_mut().insert(
             http::header::CONTENT_TYPE,
-            http::HeaderValue::from_static(mime::APPLICATION_JSON.as_ref()),
+            http::HeaderValue::from_static(APPLICATION_JSON),
         );
         resp
     })
@@ -199,7 +200,7 @@ pub(crate) fn json_error(
 
     Ok(Response::builder()
         .status(status)
-        .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+        .header(http::header::CONTENT_TYPE, APPLICATION_JSON)
         .body(owned_body(&json))?)
 }
 
@@ -226,7 +227,7 @@ pub(crate) fn bytes_body(data: Vec<u8>) -> ResponseBody {
 pub(crate) fn json_response(body: &str) -> Result<Response<ResponseBody>, GatewayError> {
     Ok(Response::builder()
         .status(http::StatusCode::OK)
-        .header(http::header::CONTENT_TYPE, mime::APPLICATION_JSON.as_ref())
+        .header(http::header::CONTENT_TYPE, APPLICATION_JSON)
         .body(owned_body(body))?)
 }
 

@@ -18,6 +18,7 @@ use crate::config::{AppConfig, HealthCheckConfig};
 use crate::error::GatewayError;
 use crate::health::{self, HealthState};
 use crate::proxy::{self, ProxyClient, ResponseBody};
+use crate::rate_limiter::{self, RateLimiterRegistry};
 use crate::router::Router;
 
 const DOCS_BASE_PATH: &str = "/swagger-ui";
@@ -35,6 +36,7 @@ pub struct Gateway {
     health_check_config: HealthCheckConfig,
     timeout: Duration,
     circuit_breakers: CircuitBreakerRegistry,
+    rate_limiters: RateLimiterRegistry,
 }
 
 impl Gateway {
@@ -82,6 +84,7 @@ impl Gateway {
             health_check_config: config.gateway.health_check,
             timeout: Duration::from_secs(config.gateway.server.timeout_secs),
             circuit_breakers,
+            rate_limiters: rate_limiter::new(),
         })
     }
 
@@ -97,6 +100,7 @@ impl Gateway {
             self.timeout,
         );
         checker.spawn();
+        rate_limiter::spawn_cleanup(self.rate_limiters.clone());
 
         let shared = Arc::new(self);
 
@@ -184,6 +188,22 @@ impl Gateway {
             Some(m) => m,
             None => return proxy::not_found(),
         };
+
+        if let Some(rl_config) = &route_match.rate_limit {
+            let mut limiters = self.rate_limiters.lock().await;
+            let key = format!("{} {}", method, route_match.upstream_path);
+            let limiter = limiters
+                .entry(key)
+                .or_insert_with(|| rate_limiter::RateLimiter::new(rl_config.clone()));
+
+            if !limiter.try_acquire(remote_addr.ip()) {
+                warn!("{} rate limited on {} {}", remote_addr, method, path);
+                return proxy::json_error(
+                    http::StatusCode::TOO_MANY_REQUESTS,
+                    "rate limit exceeded",
+                );
+            }
+        }
 
         let upstream_base = match self.services.get(&route_match.service_name) {
             Some(url) => url,

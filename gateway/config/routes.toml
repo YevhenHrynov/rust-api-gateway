@@ -54,6 +54,9 @@ method = "GET"
 service = "payment-service"
 upstream_path = "/v1/payments/:id"
 
+[routes.rate_limit]
+points = 3
+
 [[routes]]
 path = "/api/v1/payments/:id/refund"
 method = "PATCH"

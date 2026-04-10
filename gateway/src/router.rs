@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use http::Method;
 
-use crate::config::{CircuitBreakerConfig, RetryConfig, RouteDefinition};
+use crate::config::{CircuitBreakerConfig, RateLimitConfig, RetryConfig, RouteDefinition};
 
 #[derive(Debug)]
 pub struct Router {
@@ -14,6 +14,7 @@ pub struct RouteMatch {
     pub upstream_path: String,
     pub retry: Option<RetryConfig>,
     pub circuit_breaker: Option<CircuitBreakerConfig>,
+    pub rate_limit: Option<RateLimitConfig>,
 }
 
 #[derive(Debug)]
@@ -24,6 +25,7 @@ struct CompiledRoute {
     upstream_pattern: String,
     retry: Option<RetryConfig>,
     circuit_breaker: Option<CircuitBreakerConfig>,
+    rate_limit: Option<RateLimitConfig>,
 }
 
 #[derive(Debug)]
@@ -57,6 +59,7 @@ impl Router {
                     upstream_pattern: def.upstream_path,
                     retry: def.retry,
                     circuit_breaker: def.circuit_breaker,
+                    rate_limit: def.rate_limit,
                 }
             })
             .collect();
@@ -102,6 +105,7 @@ impl Router {
                 upstream_path,
                 retry: route.retry.clone(),
                 circuit_breaker: route.circuit_breaker.clone(),
+                rate_limit: route.rate_limit.clone(),
             })
         })
     }
@@ -121,6 +125,7 @@ mod tests {
                 upstream_path: "/v1/orders".to_owned(),
                 retry: None,
                 circuit_breaker: None,
+                rate_limit: None,
             },
             RouteDefinition {
                 path: "/api/v1/orders".to_owned(),
@@ -129,6 +134,7 @@ mod tests {
                 upstream_path: "/v1/orders".to_owned(),
                 retry: None,
                 circuit_breaker: None,
+                rate_limit: None,
             },
             RouteDefinition {
                 path: "/api/v1/orders/:id".to_owned(),
@@ -137,6 +143,7 @@ mod tests {
                 upstream_path: "/v1/orders/:id".to_owned(),
                 retry: None,
                 circuit_breaker: None,
+                rate_limit: None,
             },
             RouteDefinition {
                 path: "/api/v1/orders/:id".to_owned(),
@@ -145,6 +152,7 @@ mod tests {
                 upstream_path: "/v1/orders/:id".to_owned(),
                 retry: None,
                 circuit_breaker: None,
+                rate_limit: None,
             },
             RouteDefinition {
                 path: "/api/v1/orders/:id".to_owned(),
@@ -153,6 +161,7 @@ mod tests {
                 upstream_path: "/v1/orders/:id".to_owned(),
                 retry: None,
                 circuit_breaker: None,
+                rate_limit: None,
             },
         ]
     }
