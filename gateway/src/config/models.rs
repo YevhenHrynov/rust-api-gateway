@@ -87,4 +87,5 @@ pub struct RouteDefinition {
     pub retry: Option<RetryConfig>,
     pub circuit_breaker: Option<CircuitBreakerConfig>,
     pub rate_limit: Option<RateLimitConfig>,
+    pub timeout_secs: Option<u64>,
 }

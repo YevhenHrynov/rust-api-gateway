@@ -238,21 +238,40 @@ impl Gateway {
             }
         }
 
-        let result = match &route_match.retry {
-            Some(retry_config) => {
-                self.proxy
-                    .forward_with_retry(
-                        req,
-                        upstream_base,
-                        &route_match.upstream_path,
-                        retry_config,
-                    )
-                    .await
+        let timeout =
+            Duration::from_secs(route_match.timeout_secs.unwrap_or(self.timeout.as_secs()));
+
+        let result = match tokio::time::timeout(timeout, async {
+            match &route_match.retry {
+                Some(retry_config) => {
+                    self.proxy
+                        .forward_with_retry(
+                            req,
+                            upstream_base,
+                            &route_match.upstream_path,
+                            retry_config,
+                        )
+                        .await
+                }
+                None => {
+                    self.proxy
+                        .forward(req, upstream_base, &route_match.upstream_path)
+                        .await
+                }
             }
-            None => {
-                self.proxy
-                    .forward(req, upstream_base, &route_match.upstream_path)
-                    .await
+        })
+        .await
+        {
+            Ok(result) => result,
+            Err(_) => {
+                warn!(
+                    "{} {} -> {} timed out after {}s",
+                    remote_addr,
+                    method,
+                    route_match.service_name,
+                    timeout.as_secs(),
+                );
+                return proxy::json_error(http::StatusCode::GATEWAY_TIMEOUT, "request timed out");
             }
         };
 

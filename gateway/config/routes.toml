@@ -68,3 +68,10 @@ path = "/api/admin/orders/availability"
 method = "POST"
 service = "order-service"
 upstream_path = "/admin/orders/availability"
+
+[[routes]]
+path = "/api/v1/payments/:id/slow"
+method = "GET"
+service = "payment-service"
+upstream_path = "/v1/payments/:id/slow"
+timeout_secs = 2

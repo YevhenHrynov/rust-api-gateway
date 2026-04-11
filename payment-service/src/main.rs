@@ -37,6 +37,11 @@ async fn refund_payment(Path(id): Path<String>) -> Json<Payment> {
     Json(mock_payment(&id, "refunded"))
 }
 
+async fn slow_payment(Path(id): Path<String>) -> Json<Payment> {
+    tokio::time::sleep(std::time::Duration::from_secs(10)).await;
+    Json(mock_payment(&id, "completed"))
+}
+
 async fn health() -> StatusCode {
     StatusCode::OK
 }
@@ -46,7 +51,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let app = Router::new()
         .route("/health", get(health))
         .route("/v1/payments/{id}", post(create_payment).get(get_payment))
-        .route("/v1/payments/{id}/refund", patch(refund_payment));
+        .route("/v1/payments/{id}/refund", patch(refund_payment))
+        .route("/v1/payments/{id}/slow", get(slow_payment));
 
     let listener = tokio::net::TcpListener::bind(LISTEN_ADDR).await?;
 

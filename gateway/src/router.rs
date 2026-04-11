@@ -15,6 +15,7 @@ pub struct RouteMatch {
     pub retry: Option<RetryConfig>,
     pub circuit_breaker: Option<CircuitBreakerConfig>,
     pub rate_limit: Option<RateLimitConfig>,
+    pub timeout_secs: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -26,6 +27,7 @@ struct CompiledRoute {
     retry: Option<RetryConfig>,
     circuit_breaker: Option<CircuitBreakerConfig>,
     rate_limit: Option<RateLimitConfig>,
+    timeout_secs: Option<u64>,
 }
 
 #[derive(Debug)]
@@ -60,6 +62,7 @@ impl Router {
                     retry: def.retry,
                     circuit_breaker: def.circuit_breaker,
                     rate_limit: def.rate_limit,
+                    timeout_secs: def.timeout_secs,
                 }
             })
             .collect();
@@ -106,6 +109,7 @@ impl Router {
                 retry: route.retry.clone(),
                 circuit_breaker: route.circuit_breaker.clone(),
                 rate_limit: route.rate_limit.clone(),
+                timeout_secs: route.timeout_secs,
             })
         })
     }
@@ -126,6 +130,7 @@ mod tests {
                 retry: None,
                 circuit_breaker: None,
                 rate_limit: None,
+                timeout_secs: None,
             },
             RouteDefinition {
                 path: "/api/v1/orders".to_owned(),
@@ -135,6 +140,7 @@ mod tests {
                 retry: None,
                 circuit_breaker: None,
                 rate_limit: None,
+                timeout_secs: None,
             },
             RouteDefinition {
                 path: "/api/v1/orders/:id".to_owned(),
@@ -144,6 +150,7 @@ mod tests {
                 retry: None,
                 circuit_breaker: None,
                 rate_limit: None,
+                timeout_secs: None,
             },
             RouteDefinition {
                 path: "/api/v1/orders/:id".to_owned(),
@@ -153,6 +160,7 @@ mod tests {
                 retry: None,
                 circuit_breaker: None,
                 rate_limit: None,
+                timeout_secs: None,
             },
             RouteDefinition {
                 path: "/api/v1/orders/:id".to_owned(),
@@ -162,6 +170,7 @@ mod tests {
                 retry: None,
                 circuit_breaker: None,
                 rate_limit: None,
+                timeout_secs: None,
             },
         ]
     }
