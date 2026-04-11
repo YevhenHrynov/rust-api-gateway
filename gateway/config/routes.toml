@@ -1,0 +1,77 @@
+[[routes]]
+path = "/api/v1/orders"
+method = "GET"
+service = "order-service"
+upstream_path = "/v1/orders"
+
+[routes.retry]
+max_retries = 3
+base_delay_ms = 200
+
+[routes.circuit_breaker]
+failure_threshold = 3
+recovery_timeout_secs = 10
+half_open_max_requests = 3
+
+[[routes]]
+path = "/api/v1/orders"
+method = "POST"
+service = "order-service"
+upstream_path = "/v1/orders"
+
+[routes.circuit_breaker]
+failure_threshold = 3
+recovery_timeout_secs = 10
+half_open_max_requests = 3
+
+[[routes]]
+path = "/api/v1/orders/:id"
+method = "GET"
+service = "order-service"
+upstream_path = "/v1/orders/:id"
+
+[[routes]]
+path = "/api/v1/orders/:id"
+method = "PUT"
+service = "order-service"
+upstream_path = "/v1/orders/:id"
+
+[[routes]]
+path = "/api/v1/orders/:id"
+method = "DELETE"
+service = "order-service"
+upstream_path = "/v1/orders/:id"
+
+[[routes]]
+path = "/api/v1/orders/:id/pay"
+method = "POST"
+service = "payment-service"
+upstream_path = "/v1/payments/:id"
+
+[[routes]]
+path = "/api/v1/payments/:id"
+method = "GET"
+service = "payment-service"
+upstream_path = "/v1/payments/:id"
+
+[routes.rate_limit]
+points = 3
+
+[[routes]]
+path = "/api/v1/payments/:id/refund"
+method = "PATCH"
+service = "payment-service"
+upstream_path = "/v1/payments/:id/refund"
+
+[[routes]]
+path = "/api/admin/orders/availability"
+method = "POST"
+service = "order-service"
+upstream_path = "/admin/orders/availability"
+
+[[routes]]
+path = "/api/v1/payments/:id/slow"
+method = "GET"
+service = "payment-service"
+upstream_path = "/v1/payments/:id/slow"
+timeout_secs = 2

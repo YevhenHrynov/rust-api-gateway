@@ -1,0 +1,13 @@
+[server]
+host = "127.0.0.1"
+port = 8080
+timeout_secs = 30
+
+[config_files]
+services = "services.toml"
+routes = "routes.toml"
+openapi = "openapi.yaml"
+
+[health_check]
+interval_secs = 2
+path = "/health"

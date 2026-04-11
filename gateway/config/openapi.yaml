@@ -1,0 +1,254 @@
+openapi: "3.0.0"
+info:
+  title: API Gateway
+  version: 0.1.0
+  description: High-Performance API Gateway
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: gateway
+    description: Gateway internal endpoints
+  - name: orders
+    description: Order management
+  - name: payments
+    description: Payment processing
+  - name: admin
+    description: Service administration
+
+paths:
+  /health:
+    get:
+      tags: [gateway]
+      summary: Health check
+      operationId: healthCheck
+      description: Returns the health status of the gateway and backend services
+      responses:
+        "200":
+          description: Health status
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/HealthSummary"
+
+  /api/v1/orders:
+    get:
+      tags: [orders]
+      summary: List all orders
+      operationId: listOrders
+      responses:
+        "200":
+          description: List of orders
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: "#/components/schemas/Order"
+    post:
+      tags: [orders]
+      summary: Create a new order
+      operationId: createOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "201":
+          description: Order created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+
+  /api/v1/orders/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [orders]
+      summary: Get order by ID
+      operationId: getOrder
+      responses:
+        "200":
+          description: Order details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+        "404":
+          description: Order not found
+    put:
+      tags: [orders]
+      summary: Update an order
+      operationId: updateOrder
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/CreateOrderRequest"
+      responses:
+        "200":
+          description: Order updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Order"
+    delete:
+      tags: [orders]
+      summary: Delete an order
+      operationId: deleteOrder
+      responses:
+        "204":
+          description: Order deleted
+
+  /api/v1/orders/{id}/pay:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    post:
+      tags: [payments]
+      summary: Create payment for an order
+      operationId: createPayment
+      responses:
+        "201":
+          description: Payment initiated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /api/v1/payments/{id}:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [payments]
+      summary: Get payment by ID
+      operationId: getPayment
+      responses:
+        "200":
+          description: Payment details
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+        "404":
+          description: Payment not found
+
+  /api/v1/payments/{id}/refund:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    patch:
+      tags: [payments]
+      summary: Refund a payment
+      operationId: refundPayment
+      responses:
+        "200":
+          description: Payment refunded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Payment"
+
+  /api/v1/payments/{id}/slow:
+    parameters:
+      - $ref: "#/components/parameters/ResourceId"
+    get:
+      tags: [payments]
+      summary: Slow payment endpoint (10s delay)
+      operationId: slowPayment
+      description: Simulates a slow upstream
+      responses:
+        "504":
+          description: Gateway timeout
+
+  /api/admin/orders/availability:
+    post:
+      tags: [admin]
+      summary: Toggle order endpoints availability
+      operationId: setOrdersAvailability
+      description: Controls whether GET /orders and POST /orders return responses or 503. Useful for testing circuit breaker and retry behavior.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AvailabilityRequest"
+      responses:
+        "200":
+          description: Availability updated
+
+components:
+  parameters:
+    ResourceId:
+      name: id
+      in: path
+      required: true
+      schema:
+        type: string
+        format: uuid
+
+  schemas:
+    Order:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        item:
+          type: string
+        quantity:
+          type: integer
+        status:
+          type: string
+          enum: [pending, confirmed, cancelled]
+
+    CreateOrderRequest:
+      type: object
+      required: [item, quantity]
+      properties:
+        item:
+          type: string
+        quantity:
+          type: integer
+          minimum: 1
+
+    Payment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        order_id:
+          type: string
+          format: uuid
+        amount:
+          type: number
+          format: double
+        currency:
+          type: string
+        status:
+          type: string
+          enum: [processing, completed, refunded]
+          
+    AvailabilityRequest:
+      type: object
+      required: [available]
+      properties:
+        available:
+          type: boolean
+          description: Whether the order endpoints should be available
+
+    HealthSummary:
+      type: object
+      properties:
+        status:
+          type: string
+          enum: [healthy, degraded]
+        services:
+          type: object
+          additionalProperties:
+            type: string

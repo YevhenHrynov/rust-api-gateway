@@ -1,0 +1,7 @@
+[[services]]
+name = "order-service"
+url = "http://localhost:3001"
+
+[[services]]
+name = "payment-service"
+url = "http://localhost:3002"
